@@ -20,8 +20,19 @@ function csvCell(value: string): string {
   return value;
 }
 
+export function cleanedSheet(result: CleanResult): string[][] {
+  const duplicateRows = new Set<number>();
+  for (const group of result.duplicates) {
+    for (const rowIndex of group.rowIndexes) duplicateRows.add(rowIndex);
+  }
+  return [
+    [...result.headers, "is duplicate"],
+    ...result.rows.map((row, index) => [...row, duplicateRows.has(index) ? "yes" : "no"]),
+  ];
+}
+
 export function downloadCsv(result: CleanResult, fileName: string) {
-  const lines = [result.headers, ...result.rows].map((row) => row.map((cell) => csvCell(cell ?? "")).join(","));
+  const lines = cleanedSheet(result).map((row) => row.map((cell) => csvCell(cell ?? "")).join(","));
   const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   downloadBlob(blob, `${fileBase(fileName)}-cleaned.csv`);
 }
@@ -74,7 +85,7 @@ export async function downloadWorkbook(result: CleanResult, fileName: string) {
     ]),
   ];
 
-  addSheet(XLSX, workbook, "Cleaned", [result.headers, ...result.rows]);
+  addSheet(XLSX, workbook, "Cleaned", cleanedSheet(result));
   addSheet(XLSX, workbook, "Review", review);
   addSheet(XLSX, workbook, "Changes", changes);
   addSheet(XLSX, workbook, "Companies", companies);

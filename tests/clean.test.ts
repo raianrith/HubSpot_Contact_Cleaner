@@ -5,6 +5,7 @@ import { cleanRecords } from "../lib/clean";
 import { standardizeCompanies } from "../lib/companies";
 import { DEMO_HEADERS, DEMO_ROWS } from "../lib/demo-data";
 import { detectColumns } from "../lib/detect";
+import { cleanedSheet } from "../lib/export";
 import { assessEmail, cleanEmail, domainCounts, emailMatchesName } from "../lib/emails";
 import { cleanPersonName } from "../lib/names";
 import { cleanPhone } from "../lib/phones";
@@ -168,5 +169,14 @@ describe("workbook cleaning", () => {
     assert.equal(result.rows[3][4], "", "a mismatched email is not copied onto the blank duplicate");
     assert.equal(result.rows[11][1], "Pratt Paper (OH), LLC");
     assert.equal(result.rows[12][1], "Pratt Paper (IN), LLC");
+
+    const sheet = cleanedSheet(result);
+    assert.equal(sheet[0].at(-1), "is duplicate");
+    const duplicateIndexes = new Set(result.duplicates.flatMap((group) => group.rowIndexes));
+    sheet.slice(1).forEach((row, index) => {
+      assert.equal(row.at(-1), duplicateIndexes.has(index) ? "yes" : "no");
+    });
+    assert.ok(sheet.some((row) => row.at(-1) === "yes"));
+    assert.ok(sheet.some((row) => row.at(-1) === "no"));
   });
 });

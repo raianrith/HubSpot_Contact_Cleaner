@@ -108,44 +108,45 @@ export function ResultsDashboard({
 
   return (
     <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-[#7c98b6]">{fileName}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[#2d3e50]">Ready for review</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#516f90]">
-            {kpis.cellsChanged.toLocaleString()} fields updated on {kpis.recordsChanged.toLocaleString()} of {kpis.records.toLocaleString()} contacts.
-            {kpis.invalidEmails > 0
-              ? ` ${kpis.invalidEmails.toLocaleString()} emails still can’t be sent.`
-              : " No unusable emails remain."}{" "}
-            {kpis.duplicateGroups > 0
-              ? `${kpis.duplicateGroups.toLocaleString()} duplicate groups need a look before a campaign.`
-              : "No duplicate people turned up."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onReset} className="rounded-lg px-3 py-2.5 text-sm font-semibold text-[#516f90] hover:text-[#33475b]">
-            Start over
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadCsv(result, fileName)}
-            className="rounded-lg border border-[#cbd6e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#33475b] hover:border-[#ff7a59]"
-          >
-            Download CSV
-          </button>
-          <button
-            type="button"
-            onClick={saveWorkbook}
-            disabled={busy === "xlsx"}
-            className="rounded-lg bg-[#ff7a59] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_16px_rgba(255,122,89,0.25)] hover:bg-[#ff8f73] disabled:opacity-60"
-          >
-            {busy === "xlsx" ? "Preparing…" : "Download cleaned Excel"}
-          </button>
+      <div className="rounded-2xl border border-[#e5edf5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(45,62,80,0.04)] sm:px-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="truncate text-sm text-[#7c98b6]">{fileName}</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[#2d3e50]">Ready for review</h1>
+            <p className="mt-2 text-sm leading-6 text-[#516f90]">
+              {kpis.cellsChanged.toLocaleString()} fields cleaned
+              <span className="px-1.5 text-[#c5d0dc]">·</span>
+              {kpis.invalidEmails > 0
+                ? `${kpis.invalidEmails.toLocaleString()} emails can’t be sent`
+                : "No unusable emails"}
+              <span className="px-1.5 text-[#c5d0dc]">·</span>
+              {kpis.duplicateGroups > 0
+                ? `${kpis.duplicateGroups.toLocaleString()} duplicate groups`
+                : "No duplicate groups"}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-nowrap items-center gap-2">
+            <button type="button" onClick={onReset} className="whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-semibold text-[#516f90] hover:bg-[#f5f8fa] hover:text-[#33475b]">
+              Start over
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadCsv(result, fileName)}
+              className="whitespace-nowrap rounded-lg border border-[#cbd6e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#33475b] hover:border-[#ff7a59]"
+            >
+              Download CSV
+            </button>
+            <button
+              type="button"
+              onClick={saveWorkbook}
+              disabled={busy === "xlsx"}
+              className="whitespace-nowrap rounded-lg bg-[#ff7a59] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#ff8f73] disabled:opacity-60"
+            >
+              {busy === "xlsx" ? "Preparing…" : "Download cleaned Excel"}
+            </button>
+          </div>
         </div>
       </div>
-      <p className="mt-3 text-xs leading-5 text-[#7c98b6]">
-        The Cleaned sheet keeps your original columns and row order. Review, Changes, Companies, and Duplicates are extra sheets for the import check.
-      </p>
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Kpi label="Contacts" value={kpis.records} detail={`${kpis.columns} columns read`} onClick={() => setTab("preview")} />
@@ -357,10 +358,7 @@ export function ResultsDashboard({
                 />
               ))}
             </div>
-            <IssueTable issues={visibleIssues.slice(0, 200)} />
-            {visibleIssues.length > 200 ? (
-              <p className="mt-2 text-xs text-[#7c98b6]">Showing the first 200. The Excel review sheet has every row.</p>
-            ) : null}
+            <IssueTable issues={visibleIssues} result={result} />
             {visibleIssues.length === 0 ? <Empty text="Nothing in this group." /> : null}
           </div>
         ) : null}
@@ -491,33 +489,52 @@ function FilterChip({
   );
 }
 
-function IssueTable({ issues }: { issues: CleanResult["issues"] }) {
+function IssueTable({ issues, result }: { issues: CleanResult["issues"]; result: CleanResult }) {
   if (!issues.length) return null;
   return (
-    <div className="overflow-auto rounded-2xl border border-[#e5edf5] bg-white">
+    <div className="max-h-[720px] overflow-auto rounded-2xl border border-[#e5edf5] bg-white">
       <table className="min-w-full text-left text-sm">
-        <thead className="bg-[#f8fafc] text-xs uppercase tracking-wide text-[#7c98b6]">
+        <thead className="sticky top-0 z-10 bg-[#f8fafc] text-xs uppercase tracking-wide text-[#7c98b6]">
           <tr>
             <th className="px-3 py-2 font-semibold">Row</th>
-            <th className="px-3 py-2 font-semibold">Field</th>
+            <th className="px-3 py-2 font-semibold">Name</th>
+            <th className="px-3 py-2 font-semibold">Email</th>
+            <th className="px-3 py-2 font-semibold">Phone</th>
             <th className="px-3 py-2 font-semibold">Issue</th>
             <th className="px-3 py-2 font-semibold">Why it matters</th>
           </tr>
         </thead>
         <tbody>
-          {issues.map((issue, index) => (
-            <tr key={`${issue.row}-${issue.code}-${index}`} className="border-t border-[#f1f5f9]">
-              <td className="whitespace-nowrap px-3 py-2 text-[#7c98b6]">{issue.row}</td>
-              <td className="whitespace-nowrap px-3 py-2 text-[#33475b]">{issue.column}</td>
-              <td className="px-3 py-2">
-                <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${pillClass(issue.severity)}`}>{issueLabel(issue.code)}</span>
-              </td>
-              <td className="px-3 py-2 text-[#516f90]">
-                {issue.message}
-                {issue.value ? <span className="mt-1 block truncate text-xs text-[#7c98b6]">{issue.value}</span> : null}
-              </td>
-            </tr>
-          ))}
+          {issues.map((issue, index) => {
+            const contact = contactLine(result, issue.rowIndex);
+            const matches = issue.code === "duplicate" || issue.code === "duplicate_conflict" ? otherRecords(result, issue.rowIndex) : [];
+            return (
+              <tr key={`${issue.row}-${issue.code}-${index}`} className="border-t border-[#f1f5f9] align-top">
+                <td className="whitespace-nowrap px-3 py-2 text-[#7c98b6]">{issue.row}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#33475b]">{contact.name}</td>
+                <td className="px-3 py-2 text-[#33475b]">{contact.email}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-[#33475b]">{contact.phone}</td>
+                <td className="px-3 py-2">
+                  <span className={`whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold ${pillClass(issue.severity)}`}>{issueLabel(issue.code)}</span>
+                </td>
+                <td className="min-w-72 px-3 py-2 text-[#516f90]">
+                  <p>{issue.message}</p>
+                  {matches.length ? (
+                    <ul className="mt-2 space-y-1.5 border-t border-[#f1f5f9] pt-2 text-[#33475b]">
+                      {matches.map((match) => (
+                        <li key={match.row}>
+                          <span className="text-xs font-semibold uppercase tracking-wide text-[#7c98b6]">Row {match.row}</span>
+                          <span className="mt-0.5 block">{match.name}</span>
+                          <span className="block text-[#516f90]">{match.email}</span>
+                          <span className="block text-xs text-[#7c98b6]">{match.phone}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -653,6 +670,23 @@ function severityRank(severity: Severity): number {
   if (severity === "error") return 0;
   if (severity === "warning") return 1;
   return 2;
+}
+
+function contactLine(result: CleanResult, index: number) {
+  const row = result.rows[index] ?? [];
+  return {
+    name: personLine(result, index) || "No name",
+    email: cellByKind(result, row, "email") || "No email",
+    phone: cellByKind(result, row, "phone") || "No phone",
+  };
+}
+
+function otherRecords(result: CleanResult, rowIndex: number) {
+  const group = result.duplicates.find((item) => item.rowIndexes.includes(rowIndex));
+  if (!group) return [];
+  return group.rowIndexes
+    .filter((index) => index !== rowIndex)
+    .map((index) => ({ row: result.excelRows[index] ?? index + 2, ...contactLine(result, index) }));
 }
 
 function cellByKind(result: CleanResult, row: string[], kind: FieldKind): string {
