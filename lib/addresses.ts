@@ -93,7 +93,6 @@ const ALIASES: Record<string, string> = {
   nfld: "NL",
   newfoundland: "NL",
   que: "QC",
-  pq: "QC",
 };
 
 const NAMES: Record<string, string> = {};
@@ -113,7 +112,7 @@ export function lookupState(input: string): string | null {
 }
 
 const SMALL = new Set(["and", "or", "of", "the", "for", "in", "on", "at", "de", "du", "la"]);
-const PLACE_ABBREV: Record<string, string> = { st: "St.", ft: "Ft.", mt: "Mt." };
+const PLACE_ABBREV: Record<string, string> = { st: "St.", ft: "Ft.", mt: "Mt.", so: "So." };
 
 export function titleCasePlace(input: string): string {
   const tokens = normalizeWhitespace(input).split(" ").filter(Boolean);
@@ -133,10 +132,9 @@ export function cleanState(input: string, format: StateFormat): FieldClean & { r
   if (!original) return { value: "", reason: null, recognized: true };
   const abbr = lookupState(original);
   if (!abbr) {
-    const titled = titleCasePlace(original);
     return {
-      value: titled,
-      reason: titled === original ? null : "Standardized capitalization",
+      value: original,
+      reason: original === input ? null : "Trimmed extra whitespace",
       recognized: false,
     };
   }
@@ -207,6 +205,8 @@ const STREET: Record<string, string> = {
   bldg: "Bldg",
 };
 
+const KEEP_CAPS = new Set(["afb", "usa", "us", "rr", "hc"]);
+
 const DIRECTIONALS: Record<string, string> = {
   north: "N",
   south: "S",
@@ -227,7 +227,11 @@ const DIRECTIONALS: Record<string, string> = {
 };
 
 function bare(token: string): string {
-  return token.replace(/\./g, "").toLowerCase();
+  return token.replace(/[.,]/g, "").toLowerCase();
+}
+
+function withComma(token: string, value: string): string {
+  return token.endsWith(",") ? `${value},` : value;
 }
 
 export function cleanAddress(input: string): FieldClean {
@@ -238,18 +242,21 @@ export function cleanAddress(input: string): FieldClean {
   const value = tokens
     .map((token, index) => {
       const key = bare(token);
-      if (/^\d/.test(token)) return token.toUpperCase() === token ? token : token.replace(/[a-z]+$/i, (letters) => letters.toUpperCase());
+      if (/^\d/.test(token)) return withComma(token, token.toUpperCase() === token ? token.replace(/,$/, "") : token.replace(/,$/, "").replace(/[a-z]+$/i, (letters) => letters.toUpperCase()));
       const prev = index > 0 ? bare(tokens[index - 1]) : "";
       const prevIsNumber = index > 0 && /^\d/.test(tokens[index - 1]);
       const prevIsSuffix = Boolean(STREET[prev]);
       if (DIRECTIONALS[key] && (prevIsNumber || prevIsSuffix || key.length <= 2)) {
-        if (prevIsNumber || prevIsSuffix || key.length <= 2) return DIRECTIONALS[key];
+        return withComma(token, DIRECTIONALS[key]);
       }
+      const state = key.length === 2 ? lookupState(key) : null;
+      if (state && !DIRECTIONALS[key]) return withComma(token, state);
       if (key === "po") return "PO";
       if (key === "box") return "Box";
-      if (STREET[key] && index > 0) return STREET[key];
-      if (/^mc[a-z]{2,}$/.test(key)) return `Mc${key.charAt(2).toUpperCase()}${key.slice(3)}`;
-      return titleWord(key);
+      if (STREET[key] && index > 0) return withComma(token, STREET[key]);
+      if (KEEP_CAPS.has(key)) return withComma(token, key.toUpperCase());
+      if (/^mc[a-z]{2,}$/.test(key)) return withComma(token, `Mc${key.charAt(2).toUpperCase()}${key.slice(3)}`);
+      return withComma(token, titleWord(key));
     })
     .join(" ");
   return { value, reason: value === normalizeWhitespace(input) ? null : "Standardized address formatting" };
@@ -275,6 +282,21 @@ export function cleanPostal(input: string): FieldClean {
   if (/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(compact)) {
     const postal = `${compact.slice(0, 3)} ${compact.slice(3)}`;
     return { value: postal, reason: postal === original ? null : "Standardized postal code" };
+  }
+  return { value: original, reason: original === input ? null : "Trimmed extra whitespace" };
+}
+
+export function isZip4Header(header: string): boolean {
+  return /zip\s*-?\s*(?:four|4)|plus\s*-?\s*4|\+4/i.test(header);
+}
+
+export function cleanZip4(input: string): FieldClean {
+  const original = normalizeWhitespace(input);
+  if (!original) return { value: "", reason: null };
+  const digits = original.replace(/\D/g, "");
+  if (digits.length >= 1 && digits.length <= 4 && Number(digits) !== 0) {
+    const value = digits.padStart(4, "0");
+    return { value, reason: value === original ? null : "Standardized ZIP+4" };
   }
   return { value: original, reason: original === input ? null : "Trimmed extra whitespace" };
 }
@@ -353,15 +375,36 @@ const COUNTRIES: Record<string, string> = {
   southkorea: "South Korea",
   sg: "Singapore",
   singapore: "Singapore",
+  pl: "Poland",
+  poland: "Poland",
+  ph: "Philippines",
+  philippines: "Philippines",
+  tr: "Turkey",
+  turkey: "Turkey",
+  ng: "Nigeria",
+  nigeria: "Nigeria",
+  si: "Slovenia",
+  slovenia: "Slovenia",
+  il: "Israel",
+  israel: "Israel",
+  sr: "Suriname",
+  suriname: "Suriname",
+  gt: "Guatemala",
+  guatemala: "Guatemala",
+  co: "Colombia",
+  colombia: "Colombia",
+  unitedstatesminoroutlyingislands: "United States Minor Outlying Islands",
 };
 
 export function cleanCountry(input: string): FieldClean {
   const original = normalizeWhitespace(input);
   if (!original) return { value: "", reason: null };
-  const key = original.toLowerCase().replace(/[^a-z]/g, "");
+  const stripped = original.replace(/\s*\(the\)\s*$/i, "").trim();
+  const key = stripped.toLowerCase().replace(/[^a-z]/g, "");
   const mapped = COUNTRIES[key];
   if (mapped) return { value: mapped, reason: mapped === original ? null : "Standardized country name" };
-  const titled = titleCasePlace(original);
+  if (/\d/.test(stripped)) return { value: stripped, reason: stripped === input ? null : "Trimmed extra whitespace" };
+  const titled = titleCasePlace(stripped);
   return { value: titled, reason: titled === original ? null : "Standardized capitalization" };
 }
 

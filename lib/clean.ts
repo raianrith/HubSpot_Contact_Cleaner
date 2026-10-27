@@ -11,6 +11,8 @@ import {
   cleanPostal,
   cleanState,
   cleanWebsite,
+  cleanZip4,
+  isZip4Header,
 } from "./addresses";
 import { standardizeCompanies } from "./companies";
 import { assessEmail, cleanEmail, domainCounts, emailIsSafeToCopy, emailSyntaxError } from "./emails";
@@ -141,7 +143,7 @@ export function cleanRecords(
   original.forEach((row, rowIndex) => {
     row.forEach((value, columnIndex) => {
       const kind = mappings[columnIndex]?.kind ?? "text";
-      if (kind === "ignore" || kind === "company") return;
+      if (kind === "ignore" || kind === "text" || kind === "company") return;
       const cleanedField =
         kind === "first_name" || kind === "last_name" || kind === "full_name"
           ? cleanPersonName(value)
@@ -155,9 +157,11 @@ export function cleanRecords(
                   ? cleanCity(value)
                   : kind === "state"
                     ? cleanState(value, options.stateFormat)
-                    : kind === "postal_code"
-                      ? cleanPostal(value)
-                      : kind === "country"
+                      : kind === "postal_code"
+                        ? isZip4Header(mappings[columnIndex]?.header ?? "")
+                          ? cleanZip4(value)
+                          : cleanPostal(value)
+                        : kind === "country"
                         ? cleanCountry(value)
                         : kind === "job_title"
                           ? cleanJobTitle(value)
@@ -438,8 +442,10 @@ function assessAll(
           ? assessPhone(value)
           : mapping.kind === "state"
             ? assessState(value)
-            : mapping.kind === "postal_code"
-              ? assessPostal(value)
+              : mapping.kind === "postal_code"
+                ? isZip4Header(mapping.header)
+                  ? []
+                  : assessPostal(value)
               : mapping.kind === "website"
                 ? assessWebsite(value)
                 : [];

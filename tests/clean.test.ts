@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { cleanAddress, cleanPostal, cleanState } from "../lib/addresses";
+import { cleanAddress, cleanCountry, cleanPostal, cleanState, cleanWebsite, cleanZip4 } from "../lib/addresses";
 import { cleanRecords } from "../lib/clean";
 import { standardizeCompanies } from "../lib/companies";
 import { DEMO_HEADERS, DEMO_ROWS } from "../lib/demo-data";
@@ -118,6 +118,8 @@ describe("emails and phones", () => {
     assert.equal(cleanPhone("864-760-7201", "e164").value, "+18647607201");
     assert.equal(cleanPhone("920-369-898", "national").value, "920-369-898");
     assert.equal(cleanPhone("55-19-3407-3787", "national").value, "+551934073787");
+    assert.equal(cleanPhone("(801) 649-2511   (Work)", "national").value, "(801) 649-2511");
+    assert.equal(cleanPhone("9517381800ex23", "national").value, "(951) 738-1800 ext. 23");
   });
 });
 
@@ -125,13 +127,25 @@ describe("places", () => {
   it("standardizes states, streets, and ZIP codes", () => {
     assert.equal(cleanState("wisconsin", "abbr").value, "WI");
     assert.equal(cleanState("Wis.", "abbr").value, "WI");
+    assert.equal(cleanState("Colorado", "abbr").value, "CO");
     assert.equal(cleanState("WI", "full").value, "Wisconsin");
+    assert.equal(cleanState("NA", "abbr").value, "NA");
+    assert.equal(cleanState("CHI", "abbr").value, "CHI");
+    assert.equal(cleanState("PQ", "abbr").value, "PQ");
+    assert.equal(cleanState("Quebec", "abbr").value, "QC");
     assert.equal(cleanAddress("123 north main street").value, "123 N Main St");
     assert.equal(cleanAddress("9 oak avenue suite 4").value, "9 Oak Ave Ste 4");
     assert.equal(cleanAddress("P.O. Box 12").value, "PO Box 12");
+    assert.equal(cleanAddress("Peru, IL 61354").value, "Peru, IL 61354");
+    assert.equal(cleanAddress("Hollomon AFB, NM 88330").value, "Hollomon AFB, NM 88330");
+    assert.equal(cleanWebsite("WWW.Example.com").value, "https://www.example.com");
     assert.equal(cleanPostal("5401").value, "05401");
     assert.equal(cleanPostal("543016789").value, "54301-6789");
     assert.equal(cleanPostal("k1a0b1").value, "K1A 0B1");
+    assert.equal(cleanPostal("V9M1R9").value, "V9M 1R9");
+    assert.equal(cleanZip4("123").value, "0123");
+    assert.equal(cleanCountry("usa").value, "United States");
+    assert.equal(cleanCountry("Philippines (the)").value, "Philippines");
   });
 });
 
@@ -147,6 +161,36 @@ describe("workbook cleaning", () => {
     assert.equal(kinds.CustomerPhone, "phone");
     assert.equal(kinds.State, "state");
     assert.equal(kinds["Postal Code"], "postal_code");
+
+    const keapHeaders = [
+      "Phone 1",
+      "Phone 1 Type",
+      "Phone 1 Ext",
+      "Street Address 1",
+      "City",
+      "State",
+      "Postal Code",
+      "Zip Four",
+      "Country",
+      "City (Shipping)",
+      "State (Shipping)",
+      "Postal Code (Shipping)",
+      "Website",
+      "Tags",
+    ];
+    const keap = Object.fromEntries(detectColumns(keapHeaders, []).map((mapping) => [mapping.header, mapping.kind]));
+    assert.equal(keap["Phone 1"], "phone");
+    assert.equal(keap["Phone 1 Type"], "text");
+    assert.equal(keap["Phone 1 Ext"], "text");
+    assert.equal(keap["Street Address 1"], "address");
+    assert.equal(keap.City, "city");
+    assert.equal(keap["City (Shipping)"], "city");
+    assert.equal(keap["State (Shipping)"], "state");
+    assert.equal(keap["Postal Code (Shipping)"], "postal_code");
+    assert.equal(keap["Zip Four"], "postal_code");
+    assert.equal(keap.Country, "country");
+    assert.equal(keap.Website, "website");
+    assert.equal(keap.Tags, "text");
     assert.equal(kinds["Job Title"], "job_title");
 
     const result = cleanRecords(DEMO_HEADERS, DEMO_ROWS, DEMO_ROWS.map((_, index) => index + 2), mappings, defaultOptions);

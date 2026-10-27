@@ -26,10 +26,6 @@ const SINGULAR = new Set<FieldKind>([
   "full_name",
   "company",
   "job_title",
-  "city",
-  "state",
-  "postal_code",
-  "country",
   "website",
 ]);
 
@@ -47,8 +43,16 @@ function headerGuess(header: string): Guess | null {
     if (ok) rules.push({ kind, score, reason });
   };
 
+  const words = spaced.replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  const has = (...needles: string[]) => needles.some((needle) => words.includes(needle));
+
   add("email", 10, "Header looks like email", /email/.test(compact));
-  add("phone", 10, "Header looks like a phone number", /phone|mobile|cellphone|fax/.test(compact));
+  add(
+    "phone",
+    10,
+    "Header looks like a phone number",
+    has("phone", "mobile", "cellphone", "fax") && !has("type", "ext", "extension"),
+  );
   add(
     "first_name",
     9,
@@ -76,12 +80,12 @@ function headerGuess(header: string): Guess | null {
       /customer name|account name/.test(spaced),
   );
   add("job_title", 8, "Header looks like a job title", /jobtitle|job title/.test(spaced) || /^(title|position|role)$/.test(spaced));
-  add("address", 8, "Header looks like a street address", /address|street|addr/.test(compact) && !/email/.test(compact));
-  add("city", 8, "Header looks like a city", /^(city|town)$/.test(spaced) || /city$/.test(compact));
-  add("state", 8, "Header looks like a state", /state|province/.test(compact) || spaced === "region");
-  add("postal_code", 8, "Header looks like a postal code", /zip|postal/.test(compact));
-  add("country", 8, "Header looks like a country", /country|nation/.test(compact));
-  add("website", 7, "Header looks like a website", /website|webpage/.test(compact) || /^(url|domain)$/.test(spaced));
+  add("address", 8, "Header looks like a street address", (has("address", "street", "addr") || /address|street/.test(compact)) && !has("email") && !/email/.test(compact));
+  add("city", 8, "Header looks like a city", has("city", "town"));
+  add("state", 8, "Header looks like a state", has("state", "province", "region"));
+  add("postal_code", 8, "Header looks like a postal code", has("zip", "postal", "postcode") || words.includes("zip4"));
+  add("country", 8, "Header looks like a country", has("country", "nation"));
+  add("website", 7, "Header looks like a website", has("website", "webpage", "url", "domain"));
   add(
     "id",
     7,

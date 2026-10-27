@@ -14,18 +14,7 @@ interface LoadedFile {
   sheetName: string;
 }
 
-const SINGULAR = new Set<FieldKind>([
-  "first_name",
-  "last_name",
-  "full_name",
-  "company",
-  "job_title",
-  "city",
-  "state",
-  "postal_code",
-  "country",
-  "website",
-]);
+const SINGULAR = new Set<FieldKind>(["first_name", "last_name", "full_name", "company", "job_title", "website"]);
 
 export function CleanerApp() {
   const [loaded, setLoaded] = useState<LoadedFile | null>(null);

@@ -4,7 +4,7 @@ import { normalizeWhitespace } from "./text";
 export type PhoneFormat = "national" | "e164";
 
 function extensionOf(input: string): { body: string; extension: string } {
-  const match = input.match(/(?:ext\.?|extension|x)\s*(\d{1,8})\s*$/i);
+  const match = input.match(/(?:extension|ext\.?|ex|x)\s*(\d{1,8})\s*$/i);
   if (!match || match.index === undefined) return { body: input, extension: "" };
   return { body: input.slice(0, match.index).trim(), extension: match[1] };
 }
