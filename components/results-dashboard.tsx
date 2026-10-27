@@ -6,7 +6,7 @@ import { downloadCsv, downloadWorkbook } from "@/lib/export";
 import { issueLabel } from "@/lib/issue-copy";
 import type { CleanOptions, CleanResult, FieldKind, Severity } from "@/lib/types";
 
-type Tab = "preview" | "issues" | "duplicates" | "changes" | "companies";
+type Tab = "preview" | "issues" | "duplicates" | "changes" | "companies" | "address" | "website";
 type RowFilter = "all" | "changed" | "attention";
 
 const PAGE_SIZE = 25;
@@ -246,6 +246,8 @@ export function ResultsDashboard({
             ["duplicates", "Duplicates"],
             ["changes", "What changed"],
             ["companies", "Companies"],
+            ["address", "Address"],
+            ["website", "Website"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -404,6 +406,24 @@ export function ResultsDashboard({
 
         {tab === "changes" ? <ChangesPanel result={result} /> : null}
         {tab === "companies" ? <CompaniesPanel result={result} /> : null}
+        {tab === "address" ? (
+          <FieldChangesPanel
+            result={result}
+            categories={["address", "city", "state", "postal", "country"]}
+            issueCodes={["unrecognized_state", "check_postal"]}
+            empty="Streets, cities, states, ZIP codes, and countries were already consistent."
+            reviewTitle="Left for a closer look"
+          />
+        ) : null}
+        {tab === "website" ? (
+          <FieldChangesPanel
+            result={result}
+            categories={["website"]}
+            issueCodes={["invalid_website"]}
+            empty="Websites were already consistent."
+            reviewTitle="Websites that could not be formatted"
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -638,6 +658,85 @@ function CompaniesPanel({ result }: { result: CleanResult }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function FieldChangesPanel({
+  result,
+  categories,
+  issueCodes,
+  empty,
+  reviewTitle,
+}: {
+  result: CleanResult;
+  categories: string[];
+  issueCodes: string[];
+  empty: string;
+  reviewTitle: string;
+}) {
+  const grouped = new Map<string, { column: string; before: string; after: string; count: number }>();
+  for (const change of result.changes) {
+    if (!categories.includes(change.category)) continue;
+    const key = `${change.column}\0${change.before}\0${change.after}`;
+    const current = grouped.get(key) ?? { column: change.column, before: change.before, after: change.after, count: 0 };
+    current.count += 1;
+    grouped.set(key, current);
+  }
+  const rows = [...grouped.values()].sort((a, b) => b.count - a.count || a.column.localeCompare(b.column));
+
+  const review = new Map<string, { column: string; value: string; message: string; rows: number[] }>();
+  for (const issue of result.issues) {
+    if (!issueCodes.includes(issue.code)) continue;
+    const key = `${issue.column}\0${issue.value}\0${issue.message}`;
+    const current = review.get(key) ?? { column: issue.column, value: issue.value, message: issue.message, rows: [] };
+    current.rows.push(issue.row);
+    review.set(key, current);
+  }
+  const flagged = [...review.values()].sort((a, b) => b.rows.length - a.rows.length);
+
+  if (!rows.length && !flagged.length) return <Empty text={empty} />;
+
+  return (
+    <div className="grid gap-4">
+      {flagged.length ? (
+        <div className="rounded-2xl border border-[#f5c9a0] bg-[#fffaf3] p-4">
+          <h3 className="text-sm font-semibold text-[#8a5a00]">{reviewTitle}</h3>
+          <ul className="mt-3 space-y-2 text-sm text-[#33475b]">
+            {flagged.slice(0, 40).map((item) => (
+              <li key={`${item.column}-${item.value}-${item.message}`}>
+                <span className="font-medium">{item.value || "empty"}</span>
+                <span className="text-[#7c98b6]"> · {item.column}</span>
+                <span className="mt-0.5 block text-[#516f90]">{item.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {rows.length ? (
+        <div className="max-h-[640px] overflow-auto rounded-2xl border border-[#e5edf5] bg-white">
+          <table className="min-w-full text-left text-sm">
+            <thead className="sticky top-0 bg-[#f8fafc] text-xs uppercase tracking-wide text-[#7c98b6]">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Column</th>
+                <th className="px-3 py-2 font-semibold">Original</th>
+                <th className="px-3 py-2 font-semibold">Cleaned</th>
+                <th className="px-3 py-2 font-semibold">Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, 200).map((item) => (
+                <tr key={`${item.column}-${item.before}-${item.after}`} className="border-t border-[#f1f5f9]">
+                  <td className="whitespace-nowrap px-3 py-2 text-[#7c98b6]">{item.column}</td>
+                  <td className="px-3 py-2 text-[#516f90]">{item.before || "empty"}</td>
+                  <td className="px-3 py-2 font-medium text-[#33475b]">{item.after || "empty"}</td>
+                  <td className="px-3 py-2 text-[#7c98b6]">{item.count.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
