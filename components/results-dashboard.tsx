@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FIELD_OPTIONS, fieldLabel } from "@/lib/detect";
-import { downloadCsv, downloadWorkbook } from "@/lib/export";
+import { downloadCsv, fileBase, workbookBlob } from "@/lib/export";
 import { DUPLICATE_ISSUE_CODES, issueLabel } from "@/lib/issue-copy";
 import type { CleanOptions, CleanResult, FieldKind, Severity } from "@/lib/types";
 
@@ -39,6 +39,19 @@ export function ResultsDashboard({
   const [issueCode, setIssueCode] = useState<string | "action">("action");
   const [busy, setBusy] = useState<"xlsx" | "csv" | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [readyFile, setReadyFile] = useState<{ url: string; name: string } | null>(null);
+
+  useEffect(() => {
+    setReadyFile(null);
+    setSavedNote(null);
+  }, [result]);
+
+  useEffect(() => {
+    if (!readyFile) return;
+    const url = readyFile.url;
+    return () => URL.revokeObjectURL(url);
+  }, [readyFile]);
 
   const changed = useMemo(() => {
     const cells = new Set<string>();
@@ -104,10 +117,48 @@ export function ResultsDashboard({
   });
 
   async function saveWorkbook() {
-    setBusy("xlsx");
+    const suggested = `${fileBase(fileName)}-cleaned.xlsx`;
     setDownloadError(null);
+    setSavedNote(null);
+    let handle: FileSystemFileHandle | null = null;
+    const savePicker = (window as Window & {
+      showSaveFilePicker?: (options: {
+        suggestedName?: string;
+        types?: { description?: string; accept: Record<string, string[]> }[];
+      }) => Promise<FileSystemFileHandle>;
+    }).showSaveFilePicker;
+    const canPick = typeof savePicker === "function" && !navigator.userAgent.includes("Electron");
+    if (canPick) {
+      try {
+        handle = await savePicker({
+          suggestedName: suggested,
+          types: [{
+            description: "Excel workbook",
+            accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] },
+          }],
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        handle = null;
+      }
+    }
+
+    setBusy("xlsx");
     try {
-      await downloadWorkbook(result, fileName);
+      const blob = await workbookBlob(result);
+      if (handle) {
+        try {
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          setSavedNote("Saved.");
+          return;
+        } catch {
+          handle = null;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      setReadyFile({ url, name: suggested });
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : "The Excel file could not be created.");
     } finally {
@@ -146,16 +197,28 @@ export function ResultsDashboard({
             >
               Download CSV
             </button>
-            <button
-              type="button"
-              onClick={saveWorkbook}
-              disabled={busy === "xlsx"}
-              className="whitespace-nowrap rounded-lg bg-[#ff7a59] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#ff8f73] disabled:opacity-60"
-            >
-              {busy === "xlsx" ? "Preparing…" : "Download cleaned Excel"}
-            </button>
+            {readyFile ? (
+              <a
+                href={readyFile.url}
+                download={readyFile.name}
+                className="whitespace-nowrap rounded-lg bg-[#ff7a59] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#ff8f73]"
+              >
+                Save Excel
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={saveWorkbook}
+                disabled={busy === "xlsx"}
+                className="whitespace-nowrap rounded-lg bg-[#ff7a59] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#ff8f73] disabled:opacity-60"
+              >
+                {busy === "xlsx" ? "Preparing…" : "Download cleaned Excel"}
+              </button>
+            )}
             </div>
             {downloadError ? <p className="max-w-xs text-right text-xs text-[#c93b41]">{downloadError}</p> : null}
+            {savedNote ? <p className="max-w-xs text-right text-xs text-[#516f90]">{savedNote}</p> : null}
+            {readyFile ? <p className="max-w-xs text-right text-xs text-[#516f90]">Workbook is ready.</p> : null}
           </div>
         </div>
       </div>

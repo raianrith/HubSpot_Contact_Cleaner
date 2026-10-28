@@ -123,6 +123,10 @@ const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
   `<Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/>` +
   `</Relationships>`;
 
+function bytesPart(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff;
   for (let index = 0; index < bytes.length; index++) crc = CRC_TABLE[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8);
@@ -132,7 +136,7 @@ function crc32(bytes: Uint8Array): number {
 async function deflate(bytes: Uint8Array): Promise<{ data: Uint8Array; method: number }> {
   if (typeof CompressionStream === "undefined") return { data: bytes, method: 0 };
   const stream = new CompressionStream("deflate-raw");
-  const compressed = await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer();
+  const compressed = await new Response(new Blob([bytesPart(bytes)]).stream().pipeThrough(stream)).arrayBuffer();
   return { data: new Uint8Array(compressed), method: 8 };
 }
 
@@ -153,7 +157,7 @@ function zip(files: { name: string; rawLength: number; compressed: Uint8Array; m
     view.setUint32(22, file.rawLength, true);
     view.setUint16(26, name.length, true);
     local.set(name, 30);
-    localParts.push(local, file.compressed);
+    localParts.push(bytesPart(local), bytesPart(file.compressed));
     const central = new Uint8Array(46 + name.length);
     const centralView = new DataView(central.buffer);
     centralView.setUint32(0, 0x02014b50, true);
@@ -177,7 +181,7 @@ function zip(files: { name: string; rawLength: number; compressed: Uint8Array; m
   endView.setUint16(10, files.length, true);
   endView.setUint32(12, centralSize, true);
   endView.setUint32(16, offset, true);
-  return new Blob([...localParts, ...centralParts, end], {
+  return new Blob([...localParts, ...centralParts.map(bytesPart), bytesPart(end)], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 }

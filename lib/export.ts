@@ -94,7 +94,7 @@ export function downloadCsv(result: CleanResult, fileName: string) {
   downloadBlob(blob, `${fileBase(fileName)}-cleaned.csv`);
 }
 
-export async function downloadWorkbook(result: CleanResult, fileName: string) {
+export async function workbookBlob(result: CleanResult): Promise<Blob> {
   const changes = [
     ["Row", "Column", "Before", "After", "What changed"],
     ...result.changes.map((change) => [String(change.row), change.column, change.before, change.after, change.reason]),
@@ -103,7 +103,7 @@ export async function downloadWorkbook(result: CleanResult, fileName: string) {
     ["Original", "Cleaned name", "Rows"],
     ...result.companyAlignments.map((item) => [item.from, item.to, String(item.count)]),
   ];
-  const blob = await buildXlsx([
+  return buildXlsx([
     { name: "Cleaned - No Duplicates", rows: cleanedSheetWithoutDuplicates(result) },
     { name: "Cleaned - Has Duplicates", rows: cleanedSheet(result) },
     { name: "Review", rows: reviewSheet(result) },
@@ -111,5 +111,8 @@ export async function downloadWorkbook(result: CleanResult, fileName: string) {
     { name: "Companies", rows: companies },
     { name: "Duplicates", rows: duplicatesSheet(result) },
   ]);
-  downloadBlob(blob, `${fileBase(fileName)}-cleaned.xlsx`);
+}
+
+export async function downloadWorkbook(result: CleanResult, fileName: string) {
+  downloadBlob(await workbookBlob(result), `${fileBase(fileName)}-cleaned.xlsx`);
 }
