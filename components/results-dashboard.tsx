@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FIELD_OPTIONS, fieldLabel } from "@/lib/detect";
-import { downloadCsv, fileBase, workbookBlob } from "@/lib/export";
+import { fileBase, workbookBlob } from "@/lib/export";
 import { DUPLICATE_ISSUE_CODES, issueLabel } from "@/lib/issue-copy";
 import type { CleanOptions, CleanResult, FieldKind, Severity } from "@/lib/types";
 
@@ -189,13 +189,6 @@ export function ResultsDashboard({
             <div className="flex flex-nowrap items-center gap-2">
             <button type="button" onClick={onReset} className="whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-semibold text-[#516f90] hover:bg-[#f5f8fa] hover:text-[#33475b]">
               Start over
-            </button>
-            <button
-              type="button"
-              onClick={() => downloadCsv(result, fileName)}
-              className="whitespace-nowrap rounded-lg border border-[#cbd6e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#33475b] hover:border-[#ff7a59]"
-            >
-              Download CSV
             </button>
             {readyFile ? (
               <a
