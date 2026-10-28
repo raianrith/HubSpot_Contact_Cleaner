@@ -38,6 +38,7 @@ export function ResultsDashboard({
   const [page, setPage] = useState(0);
   const [issueCode, setIssueCode] = useState<string | "action">("action");
   const [busy, setBusy] = useState<"xlsx" | "csv" | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const changed = useMemo(() => {
     const cells = new Set<string>();
@@ -104,8 +105,11 @@ export function ResultsDashboard({
 
   async function saveWorkbook() {
     setBusy("xlsx");
+    setDownloadError(null);
     try {
       await downloadWorkbook(result, fileName);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The Excel file could not be created.");
     } finally {
       setBusy(null);
     }
@@ -130,7 +134,8 @@ export function ResultsDashboard({
                 : "No duplicate groups"}
             </p>
           </div>
-          <div className="flex shrink-0 flex-nowrap items-center gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <div className="flex flex-nowrap items-center gap-2">
             <button type="button" onClick={onReset} className="whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-semibold text-[#516f90] hover:bg-[#f5f8fa] hover:text-[#33475b]">
               Start over
             </button>
@@ -149,6 +154,8 @@ export function ResultsDashboard({
             >
               {busy === "xlsx" ? "Preparing…" : "Download cleaned Excel"}
             </button>
+            </div>
+            {downloadError ? <p className="max-w-xs text-right text-xs text-[#c93b41]">{downloadError}</p> : null}
           </div>
         </div>
       </div>

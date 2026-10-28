@@ -1,5 +1,6 @@
 import { DUPLICATE_ISSUE_CODES } from "./issue-copy";
 import type { CleanResult } from "./types";
+import { buildXlsx } from "./xlsx-file";
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -9,7 +10,7 @@ function downloadBlob(blob: Blob, fileName: string) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function fileBase(fileName: string): string {
@@ -94,54 +95,21 @@ export function downloadCsv(result: CleanResult, fileName: string) {
 }
 
 export async function downloadWorkbook(result: CleanResult, fileName: string) {
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.utils.book_new();
-
   const changes = [
     ["Row", "Column", "Before", "After", "What changed"],
     ...result.changes.map((change) => [String(change.row), change.column, change.before, change.after, change.reason]),
   ];
-
   const companies = [
     ["Original", "Cleaned name", "Rows"],
     ...result.companyAlignments.map((item) => [item.from, item.to, String(item.count)]),
   ];
-
-  addSheet(XLSX, workbook, "Cleaned: No Duplicates", cleanedSheetWithoutDuplicates(result));
-  addSheet(XLSX, workbook, "Cleaned: Has Duplicates", cleanedSheet(result));
-  addSheet(XLSX, workbook, "Review", reviewSheet(result));
-  addSheet(XLSX, workbook, "Changes", changes);
-  addSheet(XLSX, workbook, "Companies", companies);
-  addSheet(XLSX, workbook, "Duplicates", duplicatesSheet(result));
-
-  const output = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-  downloadBlob(
-    new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-    `${fileBase(fileName)}-cleaned.xlsx`,
-  );
-}
-
-function addSheet(
-  XLSX: typeof import("xlsx"),
-  workbook: import("xlsx").WorkBook,
-  name: string,
-  data: string[][],
-) {
-  const sheet = XLSX.utils.aoa_to_sheet(data);
-  const ref = sheet["!ref"];
-  if (ref) {
-    const range = XLSX.utils.decode_range(ref);
-    for (let row = range.s.r; row <= range.e.r; row++) {
-      for (let column = range.s.c; column <= range.e.c; column++) {
-        const address = XLSX.utils.encode_cell({ r: row, c: column });
-        const cell = sheet[address];
-        if (!cell) continue;
-        cell.t = "s";
-        cell.v = cell.v === undefined || cell.v === null ? "" : String(cell.v);
-      }
-    }
-    sheet["!autofilter"] = { ref };
-  }
-  sheet["!cols"] = (data[0] ?? []).map((header) => ({ wch: Math.min(42, Math.max(14, String(header).length + 4)) }));
-  XLSX.utils.book_append_sheet(workbook, sheet, name.slice(0, 31));
+  const blob = await buildXlsx([
+    { name: "Cleaned - No Duplicates", rows: cleanedSheetWithoutDuplicates(result) },
+    { name: "Cleaned - Has Duplicates", rows: cleanedSheet(result) },
+    { name: "Review", rows: reviewSheet(result) },
+    { name: "Changes", rows: changes },
+    { name: "Companies", rows: companies },
+    { name: "Duplicates", rows: duplicatesSheet(result) },
+  ]);
+  downloadBlob(blob, `${fileBase(fileName)}-cleaned.xlsx`);
 }
