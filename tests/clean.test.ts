@@ -5,7 +5,7 @@ import { cleanRecords } from "../lib/clean";
 import { standardizeCompanies } from "../lib/companies";
 import { DEMO_HEADERS, DEMO_ROWS } from "../lib/demo-data";
 import { detectColumns } from "../lib/detect";
-import { cleanedSheet } from "../lib/export";
+import { cleanedSheet, cleanedSheetWithoutDuplicates, duplicatesSheet, reviewSheet } from "../lib/export";
 import { assessEmail, cleanEmail, domainCounts, emailMatchesName } from "../lib/emails";
 import { cleanPersonName } from "../lib/names";
 import { cleanPhone } from "../lib/phones";
@@ -222,5 +222,25 @@ describe("workbook cleaning", () => {
     });
     assert.ok(sheet.some((row) => row.at(-1) === "yes"));
     assert.ok(sheet.some((row) => row.at(-1) === "no"));
+
+    const withoutDuplicates = cleanedSheetWithoutDuplicates(result);
+    assert.equal(withoutDuplicates.length - 1, result.rows.length - duplicateIndexes.size);
+    assert.ok(withoutDuplicates.slice(1).every((row) => row.at(-1) === "no"));
+
+    const review = reviewSheet(result);
+    const reviewRows = new Set(review.slice(1).map((row) => Number(row[0])));
+    assert.ok(review.length < result.rows.length + 1);
+    for (const issue of result.issues) {
+      const belongs = issue.severity !== "info" && issue.code !== "duplicate" && issue.code !== "duplicate_conflict";
+      if (belongs) assert.ok(reviewRows.has(issue.row));
+    }
+    for (const row of review.slice(1)) {
+      assert.equal(row[2].includes("Shares an email"), false);
+      assert.equal(row[2].includes("Same name and company"), false);
+    }
+
+    const duplicates = duplicatesSheet(result);
+    assert.equal(duplicates.length - 1, duplicateIndexes.size);
+    assert.deepEqual(duplicates[0].slice(0, 4), ["Group", "Matched on", "Conflicts", "Row"]);
   });
 });

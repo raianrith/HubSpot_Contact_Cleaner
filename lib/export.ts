@@ -1,3 +1,4 @@
+import { DUPLICATE_ISSUE_CODES } from "./issue-copy";
 import type { CleanResult } from "./types";
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -20,14 +21,69 @@ function csvCell(value: string): string {
   return value;
 }
 
-export function cleanedSheet(result: CleanResult): string[][] {
+function duplicateRowIndexes(result: CleanResult): Set<number> {
   const duplicateRows = new Set<number>();
   for (const group of result.duplicates) {
     for (const rowIndex of group.rowIndexes) duplicateRows.add(rowIndex);
   }
+  return duplicateRows;
+}
+
+export function cleanedSheet(result: CleanResult): string[][] {
+  const duplicateRows = duplicateRowIndexes(result);
   return [
     [...result.headers, "is duplicate"],
     ...result.rows.map((row, index) => [...row, duplicateRows.has(index) ? "yes" : "no"]),
+  ];
+}
+
+export function cleanedSheetWithoutDuplicates(result: CleanResult): string[][] {
+  const duplicateRows = duplicateRowIndexes(result);
+  return [
+    [...result.headers, "is duplicate"],
+    ...result.rows.flatMap((row, index) => (duplicateRows.has(index) ? [] : [[...row, "no"]])),
+  ];
+}
+
+export function reviewSheet(result: CleanResult): string[][] {
+  const duplicateByRow = new Map<number, string>();
+  for (const group of result.duplicates) {
+    for (const rowIndex of group.rowIndexes) duplicateByRow.set(rowIndex, group.id);
+  }
+  const attentionByRow = new Map<number, string[]>();
+  for (const issue of result.issues) {
+    if (issue.severity === "info" || DUPLICATE_ISSUE_CODES.has(issue.code)) continue;
+    const list = attentionByRow.get(issue.rowIndex) ?? [];
+    list.push(issue.message);
+    attentionByRow.set(issue.rowIndex, list);
+  }
+  return [
+    ["Row", "Duplicate group", "Needs attention", ...result.headers],
+    ...result.rows.flatMap((row, index) => {
+      const notes = attentionByRow.get(index);
+      if (!notes?.length) return [];
+      return [[
+        String(result.excelRows[index] ?? index + 2),
+        duplicateByRow.get(index) ?? "",
+        notes.join(" | "),
+        ...row,
+      ]];
+    }),
+  ];
+}
+
+export function duplicatesSheet(result: CleanResult): string[][] {
+  return [
+    ["Group", "Matched on", "Conflicts", "Row", ...result.headers],
+    ...result.duplicates.flatMap((group) =>
+      group.rowIndexes.map((index) => [
+        group.id,
+        group.match === "email" ? "Same email" : "Same name and company",
+        group.conflicts.join("; "),
+        String(result.excelRows[index] ?? index + 2),
+        ...(result.rows[index] ?? []),
+      ]),
+    ),
   ];
 }
 
@@ -41,28 +97,6 @@ export async function downloadWorkbook(result: CleanResult, fileName: string) {
   const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
 
-  const duplicateByRow = new Map<number, string>();
-  for (const group of result.duplicates) {
-    for (const rowIndex of group.rowIndexes) duplicateByRow.set(rowIndex, group.id);
-  }
-  const attentionByRow = new Map<number, string[]>();
-  for (const issue of result.issues) {
-    if (issue.severity === "info") continue;
-    const list = attentionByRow.get(issue.rowIndex) ?? [];
-    list.push(issue.message);
-    attentionByRow.set(issue.rowIndex, list);
-  }
-
-  const review = [
-    ["Row", "Duplicate group", "Needs attention", ...result.headers],
-    ...result.rows.map((row, index) => [
-      String(result.excelRows[index] ?? index + 2),
-      duplicateByRow.get(index) ?? "",
-      (attentionByRow.get(index) ?? []).join(" | "),
-      ...row,
-    ]),
-  ];
-
   const changes = [
     ["Row", "Column", "Before", "After", "What changed"],
     ...result.changes.map((change) => [String(change.row), change.column, change.before, change.after, change.reason]),
@@ -73,23 +107,12 @@ export async function downloadWorkbook(result: CleanResult, fileName: string) {
     ...result.companyAlignments.map((item) => [item.from, item.to, String(item.count)]),
   ];
 
-  const duplicates = [
-    ["Group", "Matched on", "Rows", "Emails", "Phones", "Conflicts"],
-    ...result.duplicates.map((group) => [
-      group.id,
-      group.match === "email" ? "Same email" : "Same name and company",
-      group.rowIndexes.map((index) => String(result.excelRows[index] ?? index + 2)).join(", "),
-      group.emails.join(", "),
-      group.phones.join(", "),
-      group.conflicts.join("; "),
-    ]),
-  ];
-
-  addSheet(XLSX, workbook, "Cleaned", cleanedSheet(result));
-  addSheet(XLSX, workbook, "Review", review);
+  addSheet(XLSX, workbook, "Cleaned: No Duplicates", cleanedSheetWithoutDuplicates(result));
+  addSheet(XLSX, workbook, "Cleaned: Has Duplicates", cleanedSheet(result));
+  addSheet(XLSX, workbook, "Review", reviewSheet(result));
   addSheet(XLSX, workbook, "Changes", changes);
   addSheet(XLSX, workbook, "Companies", companies);
-  addSheet(XLSX, workbook, "Duplicates", duplicates);
+  addSheet(XLSX, workbook, "Duplicates", duplicatesSheet(result));
 
   const output = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
   downloadBlob(

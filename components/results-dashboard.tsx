@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { FIELD_OPTIONS, fieldLabel } from "@/lib/detect";
 import { downloadCsv, downloadWorkbook } from "@/lib/export";
-import { issueLabel } from "@/lib/issue-copy";
+import { DUPLICATE_ISSUE_CODES, issueLabel } from "@/lib/issue-copy";
 import type { CleanOptions, CleanResult, FieldKind, Severity } from "@/lib/types";
 
 type Tab = "preview" | "issues" | "duplicates" | "changes" | "companies" | "address" | "website";
@@ -81,18 +81,23 @@ export function ResultsDashboard({
   const visible = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   const kpis = result.kpis;
 
+  const listedIssues = useMemo(
+    () => result.issues.filter((issue) => !DUPLICATE_ISSUE_CODES.has(issue.code)),
+    [result.issues],
+  );
+
   const issueGroups = useMemo(() => {
     const groups = new Map<string, { code: string; count: number; severity: Severity }>();
-    for (const issue of result.issues) {
+    for (const issue of listedIssues) {
       const current = groups.get(issue.code) ?? { code: issue.code, count: 0, severity: issue.severity };
       current.count += 1;
       if (issue.severity === "error") current.severity = "error";
       groups.set(issue.code, current);
     }
     return [...groups.values()].sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || b.count - a.count);
-  }, [result.issues]);
+  }, [listedIssues]);
 
-  const visibleIssues = result.issues.filter((issue) => {
+  const visibleIssues = listedIssues.filter((issue) => {
     if (issueCode === "action") return issue.severity !== "info";
     return issue.code === issueCode;
   });
@@ -348,7 +353,7 @@ export function ResultsDashboard({
         {tab === "issues" ? (
           <div>
             <div className="flex gap-2 overflow-x-auto pb-2">
-              <FilterChip active={issueCode === "action"} onClick={() => setIssueCode("action")} label="Needs action" count={result.issues.filter((issue) => issue.severity !== "info").length} />
+              <FilterChip active={issueCode === "action"} onClick={() => setIssueCode("action")} label="Needs action" count={listedIssues.filter((issue) => issue.severity !== "info").length} />
               {issueGroups.map((group) => (
                 <FilterChip
                   key={group.code}
@@ -369,8 +374,8 @@ export function ResultsDashboard({
           result.duplicates.length === 0 ? (
             <Empty text="No duplicate people. Matches are the same email, or the same first name, last name, and company." />
           ) : (
-            <div className="grid gap-3">
-              {result.duplicates.slice(0, 80).map((group) => (
+            <div className="grid max-h-[720px] gap-3 overflow-auto">
+              {result.duplicates.map((group) => (
                 <article key={group.id} className={`rounded-2xl border bg-white p-4 ${group.conflicts.length ? "border-[#f5c9a0]" : "border-[#e5edf5]"}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-[#33475b]">

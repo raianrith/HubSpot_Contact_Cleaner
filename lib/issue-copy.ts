@@ -37,6 +37,8 @@ export const ISSUE_HELP: Record<string, string> = {
   invalid_website: "This doesn’t parse as a web address.",
 };
 
+export const DUPLICATE_ISSUE_CODES = new Set(["duplicate", "duplicate_conflict"]);
+
 export function issueLabel(code: string): string {
   return ISSUE_LABELS[code] ?? code;
 }
